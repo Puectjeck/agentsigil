@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AgentSigil — a daily sigil for Agent ID holders</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin:0; font-family: ui-monospace, Menlo, Consolas, monospace; background:#0b0e17; color:#e8ecf1; }
+  main { max-width: 560px; margin: 0 auto; padding: 32px 20px 64px; }
+  h1 { font-size: 28px; margin: 0 0 4px; color:#f0b90b; }
+  h2 { font-size: 17px; margin: 28px 0 8px; color:#f0b90b; }
+  p, li { line-height: 1.55; font-size: 14.5px; color:#c6cdd8; }
+  .card { border:1px solid #232a3d; border-radius:12px; padding:18px; margin-top:18px; background:#10141f; }
+  .row { display:flex; justify-content:space-between; padding:6px 0; font-size:14.5px; }
+  .row b { color:#fff; }
+  button { width:100%; padding:13px; font: inherit; font-size:16px; border:0; border-radius:10px;
+           background:#f0b90b; color:#111; cursor:pointer; margin-top:12px; }
+  button:disabled { background:#3a4157; color:#9aa4b2; cursor:not-allowed; }
+  button.secondary { background:#1c2333; color:#e8ecf1; border:1px solid #2c3550; }
+  .muted { color:#9aa4b2; font-size:13px; }
+  .err { color:#ff7a7a; }
+  .ok { color:#7dd87d; }
+  a { color:#f0b90b; }
+  code { background:#1c2333; padding:1px 5px; border-radius:5px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>AgentSigil</h1>
+  <p>A free daily sigil for Agent ID holders. Connect your own wallet, claim once per
+     UTC day, and mint a soulbound sigil that records your day streak. That is all it does —
+     no fees, no deposits, nothing to buy.</p>
+
+  <div class="card">
+    <div class="row"><span>Wallet</span><b id="wallet">not connected</b></div>
+    <div class="row"><span>Agent ID</span><b id="agentId">—</b></div>
+    <div class="row"><span>Current streak</span><b id="streak">—</b></div>
+    <div class="row"><span>Your total claims</span><b id="myClaims">—</b></div>
+    <div class="row"><span>Claimed today (UTC)</span><b id="claimedToday">—</b></div>
+    <div class="row"><span>Next claim in</span><b id="countdown">—</b></div>
+    <div class="row"><span>Sigils minted (all users)</span><b id="globalStats">—</b></div>
+    <div class="row"><span>Claims status</span><b id="paused">—</b></div>
+    <button id="connectBtn">Connect wallet</button>
+    <button id="claimBtn" disabled>Claim today's sigil</button>
+    <p id="msg" class="muted"></p>
+  </div>
+
+  <h2>How it works</h2>
+  <ul>
+    <li>AgentSigil is an ERC-721 contract on BNB Smart Chain. It checks whether your
+        wallet holds a <b>SPACE ID Agent ID</b> (a <code>name.ai</code> identity) by calling
+        <code>balanceOf</code> on the Agent ID contract
+        <code>0x60B9262456dE011F7d15a54CdD8c48bAaa8B022F</code>. No Agent ID, no claim —
+        the check happens on-chain, inside the claim transaction itself.</li>
+    <li>One claim per wallet per UTC day. Claiming on consecutive days builds your streak;
+        missing a day resets the streak to 1 on your next claim.</li>
+    <li>Each claim mints one sigil NFT to your wallet. The artwork is an SVG generated and
+        stored entirely on-chain, showing your streak, total claims, and the UTC day.</li>
+    <li>Sigils are <b>soulbound</b>: they cannot be transferred, sold, or approved to anyone.
+        They are a record of showing up — nothing more.</li>
+    <li>Claiming is free. You only pay the BNB Smart Chain network fee (gas) for your own
+        transaction, which you review and confirm in your own wallet.</li>
+    <li>You connect your own wallet in your own browser and confirm every transaction
+        yourself. This page never asks for a seed phrase, private key, or pairing code,
+        and there is no QR-code sign-in.</li>
+    <li>Don't have an Agent ID yet? Per Binance Wallet's instructions, an Agent ID can
+        only be claimed inside the Binance App: Wallet &gt; homepage banner &gt; Agent ID.</li>
+  </ul>
+
+  <h2>Contract &amp; owner permissions</h2>
+  <ul>
+    <li>Contract address: <code id="contractAddr">to be filled after deployment</code></li>
+    <li>The contract's owner is set once, in the constructor, to a dedicated wallet
+        address (it is <i>not</i> the account that deployed the contract — the deployer
+        holds no power after deployment).</li>
+    <li>The owner's <b>only</b> powers are <code>pause()</code> and <code>unpause()</code> —
+        a safety switch that can stop and resume claims. The owner cannot mint, cannot
+        move or withdraw anything (the contract holds no funds), cannot change the
+        Agent ID gate, and cannot transfer ownership. There is no proxy and no upgrade
+        mechanism. The full source code is public and verified on BscScan.</li>
+    <li>A sigil has no promised value and this page makes no promise of any reward.
+        It is a daily on-chain keepsake for Agent ID holders.</li>
+  </ul>
+
+  <p class="muted">AgentSigil is an independent project built for the Agent ID Hackathon.
+     It is not affiliated with Binance or SPACE ID.</p>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/ethers@6.13.5/dist/ethers.umd.min.js"></script>
+<script>
+"use strict";
+/* =====================================================================
+   TO FILL AFTER DEPLOY:
+   Replace the placeholder below with the deployed AgentSigil address,
+   then redeploy this single file. Nothing else needs to change.
+   ===================================================================== */
+const CONTRACT_ADDRESS = "0x57cA622dCadFd2fD02439ac8C24Ff7f96332A025"; // deployed 2026-11-19, tx 0xafd98ffd80a4fade8ce7857573bc36c7c619633e64a33b7dc096345815a89baf
+const BSC_CHAIN_ID = 56n;
+
+const ABI = [
+  "function claim() returns (uint256)",
+  "function stateOf(address user) view returns (bool hasAgentId, bool claimedToday, uint256 streak, uint256 totalClaims, uint256 nextClaimTime)",
+  "function paused() view returns (bool)",
+  "function totalClaims() view returns (uint256)",
+  "function uniqueClaimers() view returns (uint256)",
+  "function totalSupply() view returns (uint256)"
+];
+
+const $ = (id) => document.getElementById(id);
+let provider, signer, contract, account, nextClaimAt = null, timer = null;
+
+$("contractAddr").textContent = CONTRACT_ADDRESS.includes("0000000000000000")
+  ? "to be filled after deployment" : CONTRACT_ADDRESS;
+
+function setMsg(text, cls) { const m = $("msg"); m.textContent = text || ""; m.className = cls || "muted"; }
+
+async function ensureBsc() {
+  const net = await provider.getNetwork();
+  if (net.chainId !== BSC_CHAIN_ID) {
+    await window.ethereum.request({
+      method: "wallet_switchEthereumChain",
+      params: [{ chainId: "0x38" }]
+    });
+    provider = new ethers.BrowserProvider(window.ethereum);
+  }
+}
+
+async function refresh() {
+  if (!contract || !account) return;
+  try {
+    const [st, isPaused, tc, uc, ts] = await Promise.all([
+      contract.stateOf(account), contract.paused(),
+      contract.totalClaims(), contract.uniqueClaimers(), contract.totalSupply()
+    ]);
+    $("agentId").textContent = st.hasAgentId ? "held ✓" : "not held";
+    $("agentId").className = st.hasAgentId ? "ok" : "err";
+    $("streak").textContent = st.streak.toString();
+    $("myClaims").textContent = st.totalClaims.toString();
+    $("claimedToday").textContent = st.claimedToday ? "yes" : "no";
+    $("globalStats").textContent =
+      `${ts.toString()} sigils · ${tc.toString()} claims · ${uc.toString()} holders claimed`;
+    $("paused").textContent = isPaused ? "paused by owner (safety)" : "open";
+
+    const now = Math.floor(Date.now() / 1000);
+    nextClaimAt = st.claimedToday ? Number(st.nextClaimTime) : null;
+
+    const btn = $("claimBtn");
+    if (isPaused) {
+      btn.disabled = true; btn.textContent = "Claims are paused";
+      setMsg("Claims are temporarily paused by the contract owner (safety switch).", "err");
+    } else if (!st.hasAgentId) {
+      btn.disabled = true; btn.textContent = "Agent ID required";
+      setMsg("This wallet does not hold an Agent ID, so it cannot claim. Agent IDs are claimed inside the Binance App (Wallet > homepage banner > Agent ID).", "err");
+    } else if (st.claimedToday) {
+      btn.disabled = true; btn.textContent = "Already claimed today";
+      setMsg("Come back after the next UTC midnight to keep your streak going.", "");
+    } else {
+      btn.disabled = false; btn.textContent = "Claim today's sigil";
+      setMsg(nextClaimAt ? "" : "You can claim now. Your wallet will ask you to confirm the transaction.", "");
+    }
+    tickCountdown();
+  } catch (e) {
+    setMsg("Could not read the contract. Is the contract address filled in and are you on BNB Smart Chain?", "err");
+  }
+}
+
+function tickCountdown() {
+  if (!nextClaimAt) { $("countdown").textContent = "now"; return; }
+  let s = nextClaimAt - Math.floor(Date.now() / 1000);
+  if (s <= 0) { $("countdown").textContent = "now"; refresh(); return; }
+  const h = String(Math.floor(s / 3600)).padStart(2, "0");
+  const m = String(Math.floor((s % 3600) / 60)).padStart(2, "0");
+  const sec = String(s % 60).padStart(2, "0");
+  $("countdown").textContent = `${h}:${m}:${sec}`;
+}
+
+$("connectBtn").addEventListener("click", async () => {
+  if (!window.ethereum) { setMsg("No wallet found. Open this page in a browser with a wallet extension or wallet browser.", "err"); return; }
+  try {
+    provider = new ethers.BrowserProvider(window.ethereum);
+    await provider.send("eth_requestAccounts", []);
+    await ensureBsc();
+    signer = await provider.getSigner();
+    account = await signer.getAddress();
+    contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
+    $("wallet").textContent = account.slice(0, 6) + "…" + account.slice(-4);
+    $("connectBtn").textContent = "Connected";
+    $("connectBtn").disabled = true;
+    await refresh();
+    if (timer) clearInterval(timer);
+    timer = setInterval(tickCountdown, 1000);
+  } catch (e) {
+    setMsg("Connection was rejected or failed. Nothing was signed or sent.", "err");
+  }
+});
+
+$("claimBtn").addEventListener("click", async () => {
+  if (!contract) return;
+  const btn = $("claimBtn");
+  btn.disabled = true; btn.textContent = "Confirm in your wallet…";
+  try {
+    const tx = await contract.claim();
+    setMsg("Transaction sent — waiting for confirmation…", "");
+    await tx.wait();
+    setMsg("Sigil claimed. It is in your wallet now (soulbound, non-transferable).", "ok");
+    await refresh();
+  } catch (e) {
+    setMsg("The claim did not go through (rejected in wallet, or already claimed today). No funds moved.", "err");
+    await refresh();
+  }
+});
+
+if (window.ethereum && window.ethereum.on) {
+  window.ethereum.on("accountsChanged", () => location.reload());
+  window.ethereum.on("chainChanged", () => location.reload());
+}
+</script>
+</body>
+</html>
