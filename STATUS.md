@@ -122,3 +122,11 @@ Full record: `build/codex-review.md`.
 5. **Innovation Award eligibility needs ≥30 distinct Agent ID addresses**
    interacting during 2026-11-18 → 2026-12-09 — 1 organic claim so far;
    community promotion has to happen after launch.
+
+## RESOLVED — 2026-11-19 13:47 WIB: repo + website LIVE
+
+- Jon created both repos himself, then completed the Muse connector re-login on web, which granted the GitHub App access to the new repos.
+- Source repo pushed (commit 31d59b3): https://github.com/Puectjeck/agentsigil
+- Site repo pushed (commit 108f0f2): https://github.com/Puectjeck/Puectjeck.github.io
+- LIVE WEBSITE (verified HTTP 200, page contains the contract address): https://puectjeck.github.io/agentsigil/
+- Remaining: official project-submission form still not found (announcement links none; only the Community Promotion survey exists) — monitor until 2026-12-09; Adek's claim waits for her own baw re-login.
